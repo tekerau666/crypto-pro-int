@@ -1,20 +1,76 @@
-import React, { useState } from 'react';
+/* eslint-disable no-const-assign */
+import React, { useState, useEffect } from 'react';
 import Select from 'react-select';
 import {Container, Button, Textarea, FormLabel, FormControl} from 'react-bootstrap';
+import { getUserCertificates,createAttachedSignature,createHash } from 'crypto-pro';
 
 function Example() {
     const [thumb, setThumb] = useState('');
     const [fileName, setFileName] = useState(null);
-    const [signature, setSignature] = useState('');
+    const [certificateList, setCertificateList] = useState([]);
+    const [filecontent, setFilecontent] = useState(null);
 
-    const certificateList = [{ thumbprint: '1', name: 'Certificate 1', validTo: '2022-01-01' }, { thumbprint: '2', name: 'Certificate 2', validTo: '2022-02-01' }];
-
-    const sign = () => {
-        // Code to handle signing
+    const readFile = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = res => {
+                resolve(res.target.result);
+            };
+            reader.onerror = err => reject(err);
+            reader.readAsArrayBuffer(file);
+            console.log(file.name);
+        });
     }
 
-    const download = (fileName, signature) => {
+    let signature = " ";
+
+    useEffect(() => {
+        getUserCertificates().then(certificates => {
+            setCertificateList(certificates);
+        }).catch(error => {
+            console.log(error);
+        });
+    }, []);
+
+    useEffect(() => {
+        if (fileName != null) {
+            readFile(fileName).then(contents => {
+                setFilecontent(contents);
+            });
+        } else {
+            setFilecontent(null);
+        }
+    }, [fileName])
+
+    const sign_string = async() => {
+        if((filecontent!=null)&&(thumb.value!=='')){
+            let s='';
+            const messHash = await createHash(filecontent);
+            console.log(messHash);
+            s = await createAttachedSignature(thumb.value, messHash);
+            console.log(s);
+            console.log(typeof s);
+            return s;
+        }
+    }
+
+    // async function sign() {
+    //     console.log(signature);
+    //     console.log(typeof signature);
+    //     signature = sign_string();
+    //     console.log(signature);
+    //     console.log(typeof signature);
+    // }
+
+    const download = async() => {
         // Code to handle downloading
+        const element = document.createElement('a');
+        element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(signature));
+        element.setAttribute('download', fileName.name + '.sgn');
+        element.style.display = 'none';
+        document.body.appendChild(element);
+        element.click();
+        document.body.removeChild(element);
     }
 
     return (
@@ -23,7 +79,7 @@ function Example() {
             <Select
                 id="certificate"
                 name="certificate"
-                options={certificateList.map(cert => ({ value: cert.thumbprint, label: "${cert.name}, действителен до: ${cert.validTo}" }))}
+                options={certificateList.map(cert => ({ value: cert.thumbprint,label: `${cert.name}, действителен до: ${cert.validTo}` }))}
                 value={thumb}
                 onChange={setThumb}
             />
@@ -37,13 +93,12 @@ function Example() {
                 placeholder="Выберите файл..."
             />
             <br /><br />
-            <Button disabled={!thumb} onClick={sign}>Подписать</Button>
+            <Button disabled={!thumb || !fileName} onClick={sign_string}>Подписать</Button>
             <br /><br />
             <FormControl
                 as="textarea"
                 rows={3}
                 value={signature}
-                onChange={event => setSignature(event.target.value)}
             />
             <br />
             <Button disabled={!signature} onClick={() => download(fileName, signature)}>Скачать файл ЭП</Button>
